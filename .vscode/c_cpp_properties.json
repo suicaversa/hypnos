@@ -1,0 +1,26 @@
+{
+    "configurations": [
+        {
+            "name": "Mac",
+            "includePath": [
+                "/Users/yhigashi/Documents/Arduino/libraries/ArduinoJson/src",
+                "/Users/yhigashi/Library/Arduino15/packages/esp32/hardware/esp32/1.0.4/libraries/SimpleBLE/src",
+                "/Applications/Arduino.app/Contents/Java/libraries/WiFi/src",
+                "/Users/yhigashi/Library/Arduino15/packages/esp8266/tools/**",
+                "/Users/yhigashi/Library/Arduino15/packages/esp8266/hardware/esp8266/2.6.1/**",
+                "/Users/yhigashi/Documents/Arduino/hardware/espressif/esp32/**",
+                "/Applications/Arduino.app/Contents/Java/libraries/**"
+            ],
+            "forcedInclude": [],
+            "macFrameworkPath": [
+                "/System/Library/Frameworks",
+                "/Library/Frameworks"
+            ],
+            "intelliSenseMode": "clang-x64",
+            "compilerPath": "/usr/bin/clang",
+            "cStandard": "c11",
+            "cppStandard": "c++17"
+        }
+    ],
+    "version": 4
+}
