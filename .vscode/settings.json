@@ -12,6 +12,7 @@
     "rope": "cpp",
     "slist": "cpp",
     "regex": "cpp",
-    "valarray": "cpp"
+    "valarray": "cpp",
+    "filesystem": "cpp"
   }
 }

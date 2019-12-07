@@ -6,6 +6,11 @@
 #include <WebServer.h>
 #include <WiFiClientSecure.h>
 
+#include "FS.h"
+#include "SPIFFS.h"
+ 
+#define FORMAT_SPIFFS_IF_FAILED true
+
 #define MODULE_NAME "Hypnos"
 #define SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914c"
 #define CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
@@ -129,10 +134,36 @@ void accessGivenEndpoint() {
   }
 }
 
-void handleRoot() {
+void handleRootGet() {
   String message = "Hello from ";
   message.concat(MODULE_NAME);
   server.send(200, "text/plain", message);
+}
+
+void handleRootPost() {
+  if (server.hasArg("plain")== false){ //Check if body received
+    server.send(200, "text/plain", "Body not received");
+    return;
+  } 
+  String message = "Body received:\n";
+          message += server.arg("plain");
+          message += "\n";
+
+  DynamicJsonDocument doc(102400);      
+  const DeserializationError error = deserializeJson(doc, server.arg("plain"));
+
+  if(!error) {
+    File file = SPIFFS.open("/settings.json", "w");
+    file.print(server.arg("plain"));
+    file.close();
+  }
+  
+  server.send(200, "application/json; charset=utf-8", message);
+  Serial.println(message);
+}
+
+void handleRoot() {
+  server.method() == HTTP_GET ? handleRootGet() : handleRootPost();
 }
 
 void initializeService() {
@@ -161,10 +192,40 @@ class BLECallbacks: public BLECharacteristicCallbacks {
     }
 };
 
+void loadSettings() {
+  if (!SPIFFS.exists("/settings.json")) {
+    Serial.print("setting.json not found.");
+    Serial.println("Loaded default settings.");
+  };
+  File file = SPIFFS.open("/settings.json");
+  String jsonString;
+  while(file.available()){
+    jsonString = file.readString();
+    DynamicJsonDocument doc(102400);
+    const DeserializationError error = deserializeJson(doc, jsonString);
+    if (!error) {
+      const String endpoint = doc["endpoint"];
+      const String root_ca = doc["root_ca"];
+      Serial.print("Endpoint: ");
+      Serial.println(endpoint);
+      Serial.println("RootCA: ");
+      Serial.println(root_ca);
+    } else {
+      Serial.print(F("deserializeJson() failed: "));
+      Serial.println(error.c_str());
+    }
+  }
+  file.close();
+}
+
 void initializeDevise() {
   pinMode(LED_PIN, OUTPUT);
   Serial.begin(115200);
   Serial.println("Starting Module...");
+  Serial.print("Starting Filesystem...");
+  SPIFFS.begin(FORMAT_SPIFFS_IF_FAILED);
+  loadSettings();
+  Serial.println("Done.");
   delay(100);
 }
 
