@@ -2,6 +2,8 @@
 #include <BLEDevice.h>
 #include <BLEUtils.h>
 #include <BLEServer.h>
+#include <IoAbstraction.h>
+#include <WebServer.h>
 #include <WiFiClientSecure.h>
 
 #define MODULE_NAME "Hypnos"
@@ -10,6 +12,7 @@
 #define MAX_WIFI_RETRY_SECONDS 10
 #define LED_PIN 18
 
+WebServer server(80);
 const char* test_root_ca= \
     "-----BEGIN CERTIFICATE-----\n" \
     "MIIDujCCAqKgAwIBAgILBAAAAAABD4Ym5g0wDQYJKoZIhvcNAQEFBQAwTDEgMB4G\n" \
@@ -34,6 +37,10 @@ const char* test_root_ca= \
     "TBj0/VLZjmmx6BEP3ojY+x1J96relc8geMJgEtslQIxq/H5COEBkEveegeGTLg==\n" \
     "-----END CERTIFICATE-----\n";
 
+boolean isInternetAvailable() {
+  return WiFi.status() == WL_CONNECTED;
+}
+
 boolean tryConnectWifi() {
   int i = 0;
   while (WiFi.status() != WL_CONNECTED && i < MAX_WIFI_RETRY_SECONDS) {
@@ -44,7 +51,8 @@ boolean tryConnectWifi() {
   }
 
   if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("Successfully connected");
+    Serial.print("Successfully connected: ");
+    Serial.println(WiFi.localIP().toString());
     return true;
   } else {
     Serial.println("Failed to connect.");
@@ -66,6 +74,7 @@ boolean setupWifi(const char* ssid, const char* password) {
 }
 
 void accessGivenEndpoint() {
+  if (!isInternetAvailable) return;
   WiFiClientSecure client;
   const char* server = "asia-northeast1-suica-versa.cloudfunctions.net";
   client.setCACert(test_root_ca);
@@ -75,7 +84,7 @@ void accessGivenEndpoint() {
     Serial.println("Connection failed!");
   else {
     Serial.println("Connected to server!");
-    client.println("GET https://asia-northeast1-suica-versa.cloudfunctions.net/kpiAlert?hasAlert=1 HTTP/1.0");
+    client.println("GET https://asia-northeast1-suica-versa.cloudfunctions.net/kpiAlert HTTP/1.0");
     client.println("Host: asia-northeast1-suica-versa.cloudfunctions.net");
     client.println("Connection: close");
     client.println();
@@ -90,14 +99,49 @@ void accessGivenEndpoint() {
     // if there are incoming bytes available
     // from the server, read them and print them:
     while (client.available()) {
-      char c = client.read();
-      Serial.write(c);
+      // char c = client.read();
+      // Serial.write(c);
+      DynamicJsonDocument doc(1024);      
+      String json = client.readString();
+      const DeserializationError error = deserializeJson(doc, json);
+      if (!error) {
+        if(doc["hasAlert"]) {
+          Serial.println("Has new KPI");
+          digitalWrite(LED_PIN, HIGH);
+          delay(100);
+          digitalWrite(LED_PIN, LOW);
+          delay(100);
+          digitalWrite(LED_PIN, HIGH);
+          delay(100);
+          digitalWrite(LED_PIN, LOW);
+          delay(100);
+          digitalWrite(LED_PIN, HIGH);
+          delay(100);
+          digitalWrite(LED_PIN, LOW);
+        } else {
+          Serial.println("No KPI updated");
+        }
+      }
+
     }
-    // TODO: 上の読み込み結果でKPIがあれば下を呼ぶように変更
-    digitalWrite(LED_PIN, HIGH);
 
     client.stop();
   }
+}
+
+void handleRoot() {
+  String message = "Hello from ";
+  message.concat(MODULE_NAME);
+  server.send(200, "text/plain", message);
+}
+
+void initializeService() {
+  taskManager.scheduleFixedRate(100000, accessGivenEndpoint);
+  server.on("/", handleRoot);
+  server.begin();
+  taskManager.scheduleFixedRate(1, []{
+    server.handleClient();
+  });
 }
 
 void handleBLEInput(const char* str){
@@ -105,13 +149,8 @@ void handleBLEInput(const char* str){
   DynamicJsonDocument doc(1024);
   deserializeJson(doc, str);
 
-  // const char* ssid = doc["ssid"];
-  // const char* password = doc["password"];
-  // const bool hasCheckOrder = false;
   if( !doc["ssid"].isNull() && !doc["password"].isNull()) {
-    setupWifi(doc["ssid"], doc["password"]);
-  } else if (!doc["check"].isNull()) {
-    accessGivenEndpoint();
+    if (setupWifi(doc["ssid"], doc["password"])) initializeService();
   }
 }
 
@@ -155,10 +194,10 @@ void setup() {
   if (!tryPreviousWifi()) {
     setupBLE();
   } else {
-    accessGivenEndpoint();
+    initializeService();
   }
 }
 
 void loop() {
-  delay(2000);
+  taskManager.runLoop();
 }
